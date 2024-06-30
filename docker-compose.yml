@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  database:
+    image: postgres:15
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    env_file:
+      - ./backend/api/.env
+      - ./backend/db/db.env
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+
+  migration:
+    build:
+      context: ./backend/api
+      dockerfile: Dockerfile.prisma.migrate
+    depends_on:
+      database:
+        condition: service_healthy
+    env_file:
+      - ./backend/api/.env
+
+  api:
+    build:
+      context: ./backend/api
+      dockerfile: Dockerfile.api
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+    env_file:
+      - ./backend/api/.env
+    volumes:
+      - ./backend/api:/app
+    command: npm run dev
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile.dashboard
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./dashboard:/app
+      - /app/node_modules
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+
+volumes:
+  postgres_data:
+
+networks:
+  default:
+    driver: bridge
